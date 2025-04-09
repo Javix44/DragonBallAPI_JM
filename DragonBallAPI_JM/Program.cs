@@ -12,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+// Cargar la configuración desde el archivo appsettings.json
+builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
 // Configuración de la base de datos con SQL Server (utilizando la cadena de conexión).
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

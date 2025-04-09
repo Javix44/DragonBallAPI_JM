@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace DragonBallAPI_JM.Infrastructure.Repositories
@@ -22,11 +23,7 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
         {
             _context = context;
             _httpClient = httpClient;
-            _apiUrl = configuration["DragonBallTransformationsApiUrl"];
-            if (string.IsNullOrEmpty(_apiUrl))
-            {
-                _apiUrl = "https://dragonball-api.com/api/transformations"; // URL por defecto
-            }
+            _apiUrl = configuration["ConnectionStrings:DragonBallTransformationsApiUrl"];
         }
 
         // Obtener todas las transformaciones desde la base de datos
@@ -42,63 +39,28 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
         }
 
         // Método para sincronizar transformaciones desde la API
-        public async Task<List<Transformation>> FetchTransformationsFromApi()
-        {
-            try
-            {
-                var responseString = await _httpClient.GetStringAsync(_apiUrl);
-                Console.WriteLine(responseString); // Para depuración
-
-                if (string.IsNullOrEmpty(responseString))
-                    throw new Exception("No se recibió información de la API.");
-
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-                };
-
-                var apiResponse = JsonSerializer.Deserialize<List<Transformation>>(responseString, options);
-
-                if (apiResponse == null)
-                    throw new Exception("Error al deserializar transformaciones.");
-
-                // Filtramos duplicados antes de guardar
-                var savedCount = 0;
-                foreach (var transformation in apiResponse)
-                {
-                    var exists = await _context.Transformations.AnyAsync(t => t.Name == transformation.Name);
-                    if (!exists)
-                    {
-                        transformation.Id = 0; // Dejar que la BD lo genere
-                        await _context.Transformations.AddAsync(transformation);
-                        savedCount++;
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-
-                return apiResponse;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Ocurrió un error al obtener las transformaciones de la API.", ex);
-            }
-        }
         public async Task SyncAndAssignTransformationsAsync()
         {
+            // Realizamos la llamada HTTP a la API externa
             var responseString = await _httpClient.GetStringAsync(_apiUrl);
+            // Console.WriteLine(responseString); // Muestra la respuesta JSON para depuración
+            // Verificar si la respuesta es válida
+            if (string.IsNullOrEmpty(responseString))
+                throw new Exception("No data received from the API.");
 
+            // Configurar JsonSerializerOptions para ignorar propiedades desconocidas
             var options = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                PropertyNameCaseInsensitive = true,  // Ignorar diferencias de mayúsculas/minúsculas
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull // Ignorar valores nulos
             };
-
+            
+            // Deserializar la respuesta de la API en un objeto ApiResponse
             var apiTransformations = JsonSerializer.Deserialize<List<Transformation>>(responseString, options);
-
+            
+            // Validar que la deserialización fue exitosa
             if (apiTransformations == null)
-                throw new Exception("Error al deserializar transformaciones.");
+            throw new Exception("Failed to deserialize the character data.");
 
             foreach (var apiTransformation in apiTransformations)
             {
@@ -121,11 +83,10 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
                         {
                             // Si la transformación existe, actualízala en lugar de agregarla
                             existingTransformation.Ki = apiTransformation.Ki;
-                            existingTransformation.Name = apiTransformation.Name;
                         }
                         else
                         {
-                            // Si no existe, crea una nueva instancia
+                            // Si no existe, crea una nueva instancia sin ID (BD Posee Identity)
                             var newTransformation = new Transformation
                             {
                                 Name = apiTransformation.Name,

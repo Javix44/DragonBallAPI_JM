@@ -25,13 +25,7 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
             _context = context;
             _httpClient = httpClient;
             _transformationRepository = transformationRepository;
-            // Configurar la URL de la API
-            _apiUrl = configuration["DragonBallApiUrl"];
-            if (string.IsNullOrEmpty(_apiUrl))
-            {
-                _apiUrl = "https://dragonball-api.com/api/characters"; // URL predeterminada
-            }
-
+            _apiUrl = configuration["ConnectionStrings:DragonBallCharacterApiUrl"];
         }
 
         // Método para obtener todos los personajes
@@ -47,7 +41,6 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
                 .FirstOrDefaultAsync(c => c.Id == id);
         }
         // Método para obtener un personaje por su Name
-
         public async Task<Character> GetCharacterByNameAsync(string name)
         {
 
@@ -83,7 +76,7 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
             {
                 // Realizamos la llamada HTTP a la API externa
                 var responseString = await _httpClient.GetStringAsync(_apiUrl);
-                Console.WriteLine(responseString); // Muestra la respuesta JSON para depuración
+                //Console.WriteLine(responseString); // Muestra la respuesta JSON para depuración
                 // Verificar si la respuesta es válida
                 if (string.IsNullOrEmpty(responseString))
                     throw new Exception("No data received from the API.");
@@ -91,8 +84,6 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
                 // Configurar JsonSerializerOptions para ignorar propiedades desconocidas
                 var options = new JsonSerializerOptions
                 {
-                    ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,  // Esta opción maneja ciclos de referencia
-                    MaxDepth = 32,
                     PropertyNameCaseInsensitive = true,  // Ignorar diferencias de mayúsculas/minúsculas
                     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull // Ignorar valores nulos
                 };
@@ -107,7 +98,7 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
                 // Filtrar los personajes por raza Saiyan
                 var filteredCharacters = apiResponse.Items.Where(c => c.Race == "Saiyan").ToList();
 
-                // 1. Guardar personajes sin ID
+                // 1. Guardar personajes sin ID (BD Posee Identity)
                 foreach (var apiCharacter in filteredCharacters)
                 {
                     var character = new Character
@@ -125,6 +116,7 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
 
                 // Guardar los cambios en la base de datos
                 await _context.SaveChangesAsync();
+                // Llamamos al sincronizador entre personajes y sus transformaciones
                 await _transformationRepository.SyncAndAssignTransformationsAsync();
                 // Devolver la lista de personajes filtrados
                 return filteredCharacters;

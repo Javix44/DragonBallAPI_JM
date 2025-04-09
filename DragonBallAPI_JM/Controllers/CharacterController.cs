@@ -59,7 +59,7 @@ namespace DragonBallAPI_JM.Controllers
         {
             var character = await _context.Characters
             .Include(c => c.Transformations)
-            .FirstOrDefaultAsync(c => c.Name == name);
+            .SingleOrDefaultAsync(c => c.Name == name);
 
             if (character == null)
             {
@@ -79,18 +79,20 @@ namespace DragonBallAPI_JM.Controllers
             .Where(c => c.Affiliation == affiliation)
             .ToListAsync();
 
-            if (characters == null)
+            if (!characters.Any())
             {
                 return NotFound();
             }
 
             return Ok(characters);
         }
+
+        // GET: api/Character/sync
         [Authorize]
         [HttpPost("sync")]
         public async Task<IActionResult> SyncCharacters()
         {
-            if (_context.Characters.Any() || _context.Transformations.Any())
+            if (await _context.Characters.CountAsync() > 0 || await _context.Transformations.CountAsync() > 0)
             {
                 return BadRequest("Please clean up the data before syncing.");
             }
@@ -157,10 +159,6 @@ namespace DragonBallAPI_JM.Controllers
                             _context.Transformations.Add(transformation);
                             saved++;
                         }
-                        else
-                        {
-                            Console.WriteLine($"Transformation with ID {transformation.Id} already exists. Skipping.");
-                        }
                     }
                 }
 
@@ -174,9 +172,7 @@ namespace DragonBallAPI_JM.Controllers
             {
                 // Revertir la transacción en caso de error
                 await transaction.RollbackAsync();
-                Console.WriteLine($"Error durante la sincronización: {ex.Message}");
-                Console.WriteLine($"StackTrace: {ex.StackTrace}");
-                throw;
+                return StatusCode(500, "An error occurred during sync: " + ex.Message);
             }
 
             return Ok(new { Message = $"Characters and {saved} transformations synced successfully!" });

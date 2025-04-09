@@ -16,6 +16,6 @@ namespace DragonBallAPI_JM.Domain.Repositories
         Task<List<Character>> GetCharacterByAffilationAsync(string affilation);
 
         Task AddCharacterAsync(Character character);
-        Task<bool> CheckIfEmptyAsync();  // Método adicional para validar si la tabla está vacía
+        Task<bool> CheckIfEmptyAsync();
     }
 }

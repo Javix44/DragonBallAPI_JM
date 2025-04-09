@@ -10,8 +10,7 @@ namespace DragonBallAPI_JM.Domain.Repositories
     public interface ITransformationRepository
     {
         Task<List<Transformation>> GetAllTransformationsAsync();
-
-        Task<bool> CheckIfEmptyAsync();  // Método adicional para validar si la tabla está vacía
+        Task<bool> CheckIfEmptyAsync();  
         Task SyncAndAssignTransformationsAsync();
     }
 }
