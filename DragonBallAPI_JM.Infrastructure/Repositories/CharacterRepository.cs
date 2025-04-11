@@ -74,56 +74,66 @@ namespace DragonBallAPI_JM.Infrastructure.Repositories
         {
             try
             {
-                // Realizamos la llamada HTTP a la API externa
-                var responseString = await _httpClient.GetStringAsync(_apiUrl);
-                //Console.WriteLine(responseString); // Muestra la respuesta JSON para depuración
-                // Verificar si la respuesta es válida
-                if (string.IsNullOrEmpty(responseString))
-                    throw new Exception("No data received from the API.");
+                var allCharacters = new List<Character>();
+                var currentUrl = _apiUrl;
 
-                // Configurar JsonSerializerOptions para ignorar propiedades desconocidas
                 var options = new JsonSerializerOptions
                 {
-                    PropertyNameCaseInsensitive = true,  // Ignorar diferencias de mayúsculas/minúsculas
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull // Ignorar valores nulos
+                    PropertyNameCaseInsensitive = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 };
 
-                // Deserializar la respuesta de la API en un objeto ApiResponse
-                var apiResponse = JsonSerializer.Deserialize<ApiResponse>(responseString, options);
-
-                // Validar que la deserialización fue exitosa
-                if (apiResponse == null || apiResponse.Items == null)
-                    throw new Exception("Failed to deserialize the character data.");
-
-                // Filtrar los personajes por raza Saiyan
-                var filteredCharacters = apiResponse.Items.Where(c => c.Race == "Saiyan").ToList();
-
-                // 1. Guardar personajes sin ID (BD Posee Identity)
-                foreach (var apiCharacter in filteredCharacters)
+                while (!string.IsNullOrEmpty(currentUrl))
                 {
-                    var character = new Character
-                    {
-                        Name = apiCharacter.Name,
-                        Ki = apiCharacter.Ki,
-                        Race = apiCharacter.Race,
-                        Gender = apiCharacter.Gender,
-                        Description = apiCharacter.Description,
-                        Affiliation = apiCharacter.Affiliation
-                    };
+                    var responseString = await _httpClient.GetStringAsync(currentUrl);
 
+                    if (string.IsNullOrEmpty(responseString))
+                        throw new Exception("No data received from the API.");
+
+                    var apiResponse = JsonSerializer.Deserialize<ApiResponse>(responseString, options);
+
+                    if (apiResponse == null || apiResponse.Items == null)
+                        throw new Exception("Failed to deserialize the character data.");
+
+                    var filteredCharacters = apiResponse.Items
+                        .Where(c => c.Race == "Saiyan"
+                        && c.Affiliation == "Z Fighter")
+                        .Select(apiCharacter => new Character
+                        {
+                            Name = apiCharacter.Name,
+                            Ki = apiCharacter.Ki,
+                            Race = apiCharacter.Race,
+                            Gender = apiCharacter.Gender,
+                            Description = apiCharacter.Description,
+                            Affiliation = apiCharacter.Affiliation
+                        })
+                        .ToList();
+
+                    allCharacters.AddRange(filteredCharacters);
+
+                    // Actualizar la URL para la siguiente página (si existe)
+                    var nextUrl = JsonDocument.Parse(responseString)
+                        .RootElement
+                        .GetProperty("links")
+                        .GetProperty("next")
+                        .GetString();
+
+                    currentUrl = string.IsNullOrWhiteSpace(nextUrl) ? null : nextUrl;
+                }
+
+                // Guardar todos los personajes en la DB
+                foreach (var character in allCharacters)
+                {
                     await _context.Characters.AddAsync(character);
                 }
 
-                // Guardar los cambios en la base de datos
                 await _context.SaveChangesAsync();
-                // Llamamos al sincronizador entre personajes y sus transformaciones
                 await _transformationRepository.SyncAndAssignTransformationsAsync();
-                // Devolver la lista de personajes filtrados
-                return filteredCharacters;
+
+                return allCharacters;
             }
             catch (Exception ex)
             {
-                // Manejar errores de conexión o deserialización
                 throw new Exception("An error occurred while fetching characters from the API.", ex);
             }
         }

@@ -101,9 +101,16 @@ namespace DragonBallAPI_JM.Controllers
 
             foreach (var character in characters)
             {
-                if (character.Race == "Saiyan" && !await _context.Characters.AnyAsync(c => c.Name == character.Name))
+                var race = character.Race?.ToLower();
+
+                if ((race?.Contains("saiyan") ?? false))
                 {
-                    _context.Characters.Add(character);
+                    var exists = await _context.Characters.AnyAsync(c => c.Name == character.Name);
+                    if (!exists)
+                    {
+                        character.Id = 0;
+                        _context.Characters.Add(character);
+                    }
                 }
             }
 
